@@ -1,4 +1,4 @@
 .txt
-./Esp_Sensor/Certificates.h
-./Esp_Actuator/Certificates.h
+Esp_Sensor/Certificates.h
+Esp_Actuator/Certificates.h
 Certificate.txt
