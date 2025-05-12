@@ -1,33 +1,35 @@
 #pragma once
 #include "Mqtt.hpp"
 #include "MagneticSensor.hpp"
+#include "ArduinoJson.h"
 
 class EspSensor {
     private:
         MagneticSensor* doorSensor;
-        MQTTClient* mqtt;
+        MqttClient* mqtt;
         NetworkConfig* networkConfig;
-        NetworkController* net;
-        MQTTConfig* mqttConfig;
+        NetworkHandler* net;
+        MqttConfig* mqttConfig;
         static EspSensor* instance;
-        void handleMessage(char* topic, byte* payload, unsigned int length) {
-            Serial.print("Mensaje recibido [");
-            Serial.print(topic);
-            Serial.print("]: ");
-            Serial.println((char)payload[0]);
-        }
+        const char* publishTopic;
+        const char* subscribeTopic;
     public:
-        EspSensor(int sensorPin, const char* ssid, const char* password, const char* server, int port,
-                    const char* publishTopic, const char* subscribeTopic, const char* clientId) {
+        EspSensor(int sensorPin, const char* ssid, const char* password, const char* server, int port, const char* clientId, const char* publishTopic, const char* subscribeTopic) {
             instance = this;
+            this->publishTopic = publishTopic;
+            this->subscribeTopic = subscribeTopic;
             networkConfig = new NetworkConfig(ssid, password);
-            net = new NetworkController(*networkConfig);
+            net = new NetworkHandler(networkConfig);
             doorSensor = new MagneticSensor(sensorPin);
-            mqttConfig = new MQTTConfig(server, port, publishTopic, subscribeTopic, clientId,
-                                        [](char* topic, byte* payload, unsigned int length) {
-                                            if (instance) instance->handleMessage(topic, payload, length);
-                                        });
-            mqtt = new MQTTClient(*net, *mqttConfig);
+            mqttConfig = new MqttConfig(server, clientId, 
+                [](char* topic, uint8_t* payload, unsigned int length) {
+                    Serial.print("Mensaje recibido [");
+                    Serial.print(topic);
+                    Serial.print("]: ");
+                    Serial.println((char)payload[0]);
+                }
+                , port);
+            mqtt = new MqttClient( mqttConfig,net);
         }
         void setup() {
             Serial.begin(115200);
@@ -37,11 +39,9 @@ class EspSensor {
         void loop() {
             mqtt->loop();
             if (doorSensor->hasStateChanged()) {
-                if (doorSensor->getLastState()) {
-                    mqtt->publish("OPEN");
-                } else {
-                    mqtt->publish("CLOSED");
-                }
+                JsonDocument doc;
+                doc["state"]["desired"]["exteriorDoor"] = doorSensor->getLastState() ? "OPEN" : "CLOSE";
+                mqtt->publish(publishTopic, doc.as<String>().c_str());
             }
         }
 };

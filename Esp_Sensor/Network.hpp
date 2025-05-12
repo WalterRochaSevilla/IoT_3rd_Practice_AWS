@@ -14,9 +14,6 @@ class NetworkConfig{
             client->setPrivateKey(AWS_PRIVATE_KEY);
             client->setCertificate(AWS_CLIENT_CERTIFICATE);
         }
-        NetworkConfig(const char* ssid, const char* password) : ssid(ssid), password(password) {
-            client = new WiFiClientSecure();
-        }
         NetworkConfig(const char* ssid, const char* password, const char* root_ca, const char* private_key, const char* client_cert) : ssid(ssid), password(password) {
             client = new WiFiClientSecure();
             client->setCACert(root_ca);
@@ -54,7 +51,7 @@ class NetworkHandler {
                 Serial.println("Reconnected to WiFi");
             }
         }
-        void inicialize() {
+        void initialize() {
             WiFi.mode(WIFI_STA);
             WiFi.setSleep(false);
             WiFi.setAutoReconnect(true);

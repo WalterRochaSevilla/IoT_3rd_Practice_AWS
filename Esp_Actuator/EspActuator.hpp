@@ -1,35 +1,43 @@
 #pragma once
 #include "Mqtt.hpp"
 #include "ServoController.hpp"
+#include <ArduinoJson.h>
 
 class EspActuator {
 private:
     ServoController* servoController;
-    MQTTClient* mqtt;
+    MqttClient* mqtt;
     NetworkConfig* networkConfig;
-    NetworkController* net;
-    MQTTConfig* mqttConfig;
+    NetworkHandler* net;
+    MqttConfig* mqttConfig;
     static EspActuator* instance;
-
-    static void mqttCallback(char* topic, byte* payload, unsigned int length) {
+    const char* publishTopic;
+    const char* subscribeTopic;
+    static void mqttCallback(char* topic, uint8_t* payload, unsigned int length) {
         if (instance) instance->handleMessage(topic, payload, length);
     }
 
-    void handleMessage(char* topic, byte* payload, unsigned int length) {
+    void handleMessage(char* topic, uint8_t* payload, unsigned int length) {
         Serial.print("Mensaje recibido [");
         Serial.print(topic);
-        Serial.print("]: ");
-        Serial.println((char)payload[0]);
-        
-        if (payload[0] == '0') {
-            servoController->open();
-            Serial.println("Turning ON the actuator");
-        } else if (payload[0] == '1') {
-            servoController->close();
-            Serial.println("Turning OFF the actuator");
-        } else {
-            Serial.println("Invalid command received.");
+        Serial.print("]: ");        
+        Serial.println();
+        JsonDocument doc;
+        DeserializationError error = deserializeJson(doc, payload);
+        if (error) {
+            Serial.print("Error parseando JSON: ");
+            Serial.println(error.c_str());
+            return;
         }
+        const char* doorState = doc["state"]["interiorDoor"];  
+        if (strcmp(doorState, "OPEN") == 0) {
+            servoController->open();
+        } else if (strcmp(doorState, "CLOSE") == 0) {
+            servoController->close();
+        }
+        JsonDocument responseDoc;
+        responseDoc["state"]["reported"]["interiorDoor"] = doorState;
+        mqtt->publish(publishTopic, responseDoc.as<String>().c_str());
     }
 
 public:
@@ -37,20 +45,26 @@ public:
                    const char* publishTopic, const char* subscribeTopic, const char* clientId) {
         instance = this;
         networkConfig = new NetworkConfig(ssid, password);
-        net = new NetworkController(*networkConfig);
+        net = new NetworkHandler(networkConfig);
         servoController = new ServoController(actuatorPin);
-        mqttConfig = new MQTTConfig(server, port, publishTopic, subscribeTopic, clientId, &mqttCallback);
-        mqtt = new MQTTClient(*net, *mqttConfig);
+        mqttConfig = new MqttConfig(server, clientId, &mqttCallback, port);
+        mqtt = new MqttClient(mqttConfig,net);
+        this->publishTopic = publishTopic;
+        this->subscribeTopic = subscribeTopic;
     }
 
     void setup() {
         Serial.begin(115200);
         mqtt->initialize();
+        mqtt->subscribe(subscribeTopic);
         servoController->begin();
-        mqtt->subscribe();
     }
 
     void loop() {
+        if(!mqtt->connected()){
+            mqtt->reconnect();
+            mqtt->subscribe(subscribeTopic);
+        }
         mqtt->loop();
     }
 };

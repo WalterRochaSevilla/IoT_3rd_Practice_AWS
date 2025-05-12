@@ -32,6 +32,11 @@ class MqttClient{
         ~MqttClient() {
             delete client;
         }
+        void initialize() {
+            networkHandler->initialize();
+            networkHandler->connect();
+            reconnect();
+        }
         void reconnect() {
             if (!client->connected()) {
                 Serial.print("Attempting MQTT connection...");
@@ -44,6 +49,9 @@ class MqttClient{
                     delay(5000);
                 }
             }
+        }
+        bool connected() {
+            return client->connected();
         }
         void publish(const char* topic, const char* payload) {
             if (client->connected()) {
